@@ -8,7 +8,7 @@ opencv-python
 resampy
 python_speech_features
 filetype==1.2.0
-gradio==4.26.0
+gradio
 psutil
 tqdm
 tensorflow==2.10.0
