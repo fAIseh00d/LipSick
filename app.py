@@ -36,10 +36,47 @@ def process_files(source_video, driving_audio, custom_crop_radius=None, auto_mas
         print("Please upload audio first.")
         return "", "Error: Audio file is required."
 
+import warnings
+from compute_crop_radius import calculate_crop_radius_statistics
+from utils.reference_frame import extract_and_crop_frame, delete_existing_reference_frames, overlay_text
+import cv2
+
+# Suppress specific warnings about video conversion
+warnings.filterwarnings("ignore", message="Video does not have browser-compatible container or codec. Converting to mp4")
+
+def get_versioned_filename(filepath):
+    base, ext = os.path.splitext(filepath)
+    counter = 1
+    versioned_filepath = filepath
+    while os.path.exists(versioned_filepath):
+        versioned_filepath = f"{base}({counter}){ext}"
+        counter += 1
+    return versioned_filepath
+
+def compute_crop_radius_stats(video_file):
+    if video_file is None:
+        return "Please upload a video file first."
+    print("Computing Crop Radius...")
+    _, _, _, most_common = calculate_crop_radius_statistics(video_file.name)
+    print(f"Done: Crop radius = {most_common}")
+    return most_common
+
+def process_files(source_video, driving_audio, custom_crop_radius=None, auto_mask=True, ref_index_1=None, ref_index_2=None, ref_index_3=None, ref_index_4=None, ref_index_5=None, activate_custom_frames=False):
+    ref_indices = [index for index in [ref_index_1, ref_index_2, ref_index_3, ref_index_4, ref_index_5] if index is not None]
+    if custom_crop_radius is None or custom_crop_radius == 0:
+        ref_indices = [index + 5 for index in ref_indices]
+    ref_indices_str = ','.join(map(str, ref_indices)) if len(ref_indices) == 5 else ""
+
+    if not driving_audio:
+        print("Please upload audio first.")
+        return "", "Error: Audio file is required."
+
     pretrained_model_path = "./asserts/pretrained_lipsick.pth"
     deepspeech_model_path = "./asserts/output_graph.pb"
     res_video_dir = "./asserts/inference_result"
 
+    base_name = os.path.splitext(os.path.basename(source_video))[0]
+    output_video_name = f"{base_name}_lipsick.mp4" if not auto_mask else "LipSick_Blend.mp4"
     base_name = os.path.splitext(os.path.basename(source_video))[0]
     output_video_name = f"{base_name}_lipsick.mp4" if not auto_mask else "LipSick_Blend.mp4"
     output_video_path = os.path.join(res_video_dir, output_video_name)
@@ -49,11 +86,22 @@ def process_files(source_video, driving_audio, custom_crop_radius=None, auto_mas
         'python', 'inference.py',
         '--source_video_path', source_video,
         '--driving_audio_path', driving_audio,
+        '--source_video_path', source_video,
+        '--driving_audio_path', driving_audio,
         '--pretrained_lipsick_path', pretrained_model_path,
         '--deepspeech_model_path', deepspeech_model_path,
         '--res_video_dir', res_video_dir,
         '--custom_reference_frames', ref_indices_str
     ]
+
+    if custom_crop_radius is not None:
+        cmd.extend(['--custom_crop_radius', str(custom_crop_radius)])
+
+    if activate_custom_frames:
+        cmd.append('--activate_custom_frames')
+
+    if auto_mask:
+        cmd.append('--auto_mask')
 
     if custom_crop_radius is not None:
         cmd.extend(['--custom_crop_radius', str(custom_crop_radius)])
@@ -159,4 +207,4 @@ with gr.Blocks(css=".input_number { width: 80px; }") as iface:
             inputs=[source_video, driving_audio, custom_crop_radius, auto_mask, ref_index_1, ref_index_2, ref_index_3, ref_index_4, ref_index_5, activate_custom_frames],
             outputs=[status_text, output_video]
         )
-    iface.launch(inbrowser=True)
+    iface.launch(share=True)
